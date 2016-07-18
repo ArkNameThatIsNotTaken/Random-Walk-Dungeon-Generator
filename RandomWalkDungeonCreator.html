@@ -1,0 +1,117 @@
+<html>
+	<head>
+		<title>Random Walk Dungeon Generator</title>
+		<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+		<script type="text/javascript">
+			function Index(x, y) {
+				this.x = x;
+				this.y = y;
+				this.beMinimum = function(index) {
+					this.x = Math.min(this.x, index.x);
+					this.y = Math.min(this.y, index.y); };
+				this.beMaximum = function(index) {
+					this.x = Math.max(this.x, index.x);
+					this.y = Math.max(this.y, index.y); };
+				this.toString = function() { return 'X' + x + 'Y' + y; }; }
+				
+			Index.MIN_VALUE = new Index(Number.MIN_VALUE, Number.MIN_VALUE);
+			Index.MAX_VALUE = new Index(Number.MAX_VALUE, Number.MAX_VALUE);
+				
+			function Direction(name, oppositeName, getIndexIncrement) {
+				this.name = name;
+				this.oppositeName = oppositeName;
+				this.getIndexIncrement = getIndexIncrement;
+				this.toString = function() { return this.name; }; }
+		
+			function Room(index) {
+				this.index = index;
+				this.passages = new Room.Passages(); }
+
+			Room.sides = [
+				new Direction('north', 'south', function(index) { return new Index(index.x, index.y - 1); }),
+				new Direction('south', 'north', function(index) { return new Index(index.x, index.y + 1); }),
+				new Direction('west', 'east', function(index) { return new Index(index.x - 1, index.y); }),
+				new Direction('east', 'west', function(index) { return new Index(index.x + 1, index.y); })];
+			Room.side = {};
+			Room.sides.forEach(function(side) { Room.side[side.name] = side; });
+			Room.oppositeSide = {};
+			Room.sides.forEach(function(side) { Room.oppositeSide[side.name] = Room.side[side.oppositeName]; });
+			
+			Room.Passages = function() { // Returns an object that contains a truthy value for keys that are a room side for which the room has a passage to an existing adjacent room in the side's direction.
+				this.getIsPassable = function(side) { return this.hasOwnProperty(side); };
+				this.bePassable = function(side) { this[side] = true; };
+				for(var argumentIndex = 0; argumentIndex < arguments.length; argumentIndex++) this.bePassable(arguments[argumentIndex]);
+				this.toString = function() {
+					var passableSides = [];
+					Room.sides.forEach(function(side) { if(this.getIsPassable(side)) passableSides.push(side); }.bind(this));
+					return passableSides.join(); }; }
+					
+			Room.Passages.empty = new Room.Passages();
+
+			Room.textRepresentationByPassages = {
+				[Room.Passages.empty]: ' ',
+				[new Room.Passages(Room.side.north)]: '╵',
+				[new Room.Passages(Room.side.north, Room.side.west)]: '┘',
+				[new Room.Passages(Room.side.north, Room.side.east)]: '└',
+				[new Room.Passages(Room.side.south)]: '╷',
+				[new Room.Passages(Room.side.south, Room.side.west)]: '┐',
+				[new Room.Passages(Room.side.south, Room.side.east)]: '┌',
+				[new Room.Passages(Room.side.west)]: '╴',
+				[new Room.Passages(Room.side.east)]: '╶',
+				[new Room.Passages(Room.side.north, Room.side.south)]: '│',
+				[new Room.Passages(Room.side.north, Room.side.south, Room.side.west)]: '┤',
+				[new Room.Passages(Room.side.north, Room.side.south, Room.side.east)]: '├',
+				[new Room.Passages(Room.side.north, Room.side.south, Room.side.west, Room.side.east)]: '┼',
+				[new Room.Passages(Room.side.west, Room.side.east)]: '─',
+				[new Room.Passages(Room.side.west, Room.side.east, Room.side.north)]: '┴',
+				[new Room.Passages(Room.side.west, Room.side.east, Room.side.south)]: '┬' };
+
+			function Rooms() {
+				this.array = [],
+				this.indexMinimum = Index.MAX_VALUE;
+				this.indexMaximum = Index.MIN_VALUE;
+				this.forceGet = function(index) {
+					var room = this[index];
+					if(room) return room;
+					room = new Room(index);
+					this[index] = room;
+					this.array.push(room);
+					this.indexMinimum.beMinimum(index);
+					this.indexMaximum.beMaximum(index);
+					return room; }
+				this.createTextRepresentation = function() {
+					var rows = [];
+					for(var y = this.indexMinimum.y; y <= this.indexMaximum.y; y++) {
+						var row = '';
+						for(var x = this.indexMinimum.x; x <= this.indexMaximum.x; x++) {
+							var room = this[new Index(x, y)];
+							row += Room.textRepresentationByPassages[room ? room.passages : Room.Passages.empty]; }
+						rows.push(row); }
+					return rows.join('\r\n'); } }
+					
+			function getRandom(array) { return array[Math.floor(Math.random() * array.length)]; }
+			
+			function RandomWalkRoomsBuilder() { // Starts with one already created room at X0Y0.
+				this.rooms = new Rooms();
+				this.currentRoom = this.rooms.forceGet(new Index(0, 0));
+				this.walkOnce = function() {
+					var direction = getRandom(Room.sides);
+					var nextRoom = this.rooms.forceGet(direction.getIndexIncrement(this.currentRoom.index));
+					this.currentRoom.passages.bePassable(direction);
+					nextRoom.passages.bePassable(Room.oppositeSide[direction.name]);
+					this.currentRoom = nextRoom; };
+				this.walkForXRooms = function(roomsCount) { while(this.rooms.array.length < roomsCount) this.walkOnce(); }; }
+		</script>
+	</head>
+	<body>
+		<div id="output" style="font-family: 'Courier New', Courier, monospace; display: inline-block; line-height:100%; white-space: pre" />
+		<script type="text/javascript">
+			var randomWalkRoomsBuilder = new RandomWalkRoomsBuilder();
+			console.time("build");
+			randomWalkRoomsBuilder.walkForXRooms(1000);
+			console.timeEnd("build");
+			document.getElementById('output').innerHTML = randomWalkRoomsBuilder.rooms.createTextRepresentation();
+			rooms = randomWalkRoomsBuilder.rooms;
+		</script>
+	</body>
+</html>
